@@ -20,7 +20,11 @@
 
 package com.github.fracpete.jshell;
 
+import com.github.fracpete.processoutput4j.core.StreamingProcessOutputType;
+import com.github.fracpete.processoutput4j.core.StreamingProcessOwner;
+import com.github.fracpete.processoutput4j.output.StreamingProcessOutput;
 import nz.ac.waikato.cms.core.FileUtils;
+import nz.ac.waikato.cms.core.Utils;
 import nz.ac.waikato.cms.gui.core.BaseFileChooser;
 import nz.ac.waikato.cms.gui.core.BaseFrame;
 import nz.ac.waikato.cms.gui.core.BasePanel;
@@ -44,6 +48,9 @@ import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.io.File;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Panel for performing scripting via jshell. Requires Java 9.
@@ -53,7 +60,8 @@ import java.io.File;
  * @author FracPete (fracpete at gmail dot com)
  */
 public class JShellPanel
-  extends BasePanel {
+  extends BasePanel
+  implements StreamingProcessOwner {
 
   /** whether scripting is available. */
   protected Boolean m_Available;
@@ -90,6 +98,9 @@ public class JShellPanel
 
   /** for the jshell output. */
   protected JTextArea m_TextOutput;
+
+  /** executes the script. */
+  protected transient StreamingProcessOutput m_Execution;
 
   /**
    * Initializes the members.
@@ -202,7 +213,7 @@ public class JShellPanel
   protected void updateButtons() {
     boolean     running;
 
-    running = false;  // TODO
+    running = (m_Execution != null);
 
     // script
     m_ButtonScriptLoad.setEnabled(!running);
@@ -234,7 +245,15 @@ public class JShellPanel
    * @param script	the script to load
    */
   public void loadScript(File script) {
-    // TODO
+    List<String> 	lines;
+
+    try {
+      lines = Files.readAllLines(script.toPath());
+      m_TextCode.setText(Utils.flatten(lines, "\n"));
+    }
+    catch (Exception e) {
+      GUIHelper.showErrorMessage(this, "Failed to load script from: " + script, e);
+    }
 
     updateButtons();
   }
@@ -243,19 +262,95 @@ public class JShellPanel
    * Lets the user save the script to a file.
    */
   public void saveScript() {
-    // TODO
+    int		retVal;
+    File	script;
+    String	msg;
+
+    retVal = m_FileChooserScript.showSaveDialog(this);
+    if (retVal != BaseFileChooser.APPROVE_OPTION)
+      return;
+
+    script = m_FileChooserScript.getSelectedFile();
+    msg    = FileUtils.writeToFileMsg(script.getAbsolutePath(), m_TextCode.getText(), false, null);
+    if (msg != null)
+      GUIHelper.showErrorMessage(this, "Failed to save script to : " + script + "\n" + msg);
 
     updateButtons();
   }
 
+  /**
+   * Executes the script.
+   */
   public void runScript() {
-    // TODO
+    List<String>	cmd;
+    final File		tmpFile;
+    String		code;
+    String		msg;
+    ProcessBuilder 	builder;
+    Runnable		run;
+
+    clearScriptOutput();
+
+    // create tmp file name
+    try {
+      tmpFile = File.createTempFile("jshell-", ".jsh");
+    }
+    catch (Exception e) {
+      GUIHelper.showErrorMessage(this, "Failed to create temporary file for script!\nCannot execute script!", e);
+      return;
+    }
+
+    // ensure that "/exit is in code"
+    code = m_TextCode.getText();
+    if (!code.toLowerCase().contains("/exit"))
+      code += "\n/exit\n";
+
+    // save script to tmp file
+    msg = FileUtils.writeToFileMsg(tmpFile.getAbsolutePath(), code, false, null);
+    if (msg != null) {
+      tmpFile.delete();
+      GUIHelper.showErrorMessage(this, "Failed to write script to temporary file: " + tmpFile + "\n" + msg);
+      return;
+    }
+
+    // build commandline for jshell
+    cmd = new ArrayList<>();
+    cmd.add(getExecutable());
+    cmd.add("--class-path");
+    cmd.add(System.getProperty("java.class.path"));
+    cmd.add(tmpFile.getAbsolutePath());
+
+    builder = new ProcessBuilder();
+    builder.command(cmd);
+    m_Execution = new StreamingProcessOutput(this);
+
+    run = new Runnable() {
+      @Override
+      public void run() {
+	try {
+	  m_Execution.monitor(builder);
+	}
+	catch (Exception e) {
+	  GUIHelper.showErrorMessage(JShellPanel.this, "Failed to execute script!", e);
+	}
+	m_Execution = null;
+	tmpFile.delete();
+	updateButtons();
+      }
+    };
+    new Thread(run).start();
 
     updateButtons();
   }
 
+  /**
+   * Stops a running script.
+   */
   public void stopScript() {
-    // TODO
+    if (m_Execution != null) {
+      m_Execution.destroy();
+      m_Execution = null;
+    }
 
     updateButtons();
   }
@@ -311,9 +406,34 @@ public class JShellPanel
   public boolean isAvailable() {
     if (m_Available == null) {
       m_Available = JavaVersion.JAVA_RECENT.atLeast(JavaVersion.JAVA_9)
-	&& new File(getExecutable()).exists();
+	&& new File(getExecutable()).exists()
+	&& !System.getProperty("java.class.path").isEmpty();
     }
     return m_Available;
+  }
+
+  /**
+   * Returns what output from the process to forward.
+   *
+   * @return 		the output type
+   */
+  public StreamingProcessOutputType getOutputType() {
+    return StreamingProcessOutputType.BOTH;
+  }
+
+  /**
+   * Processes the incoming line.
+   *
+   * @param line	the line to process
+   * @param stdout	whether stdout or stderr
+   */
+  public void processOutput(String line, boolean stdout) {
+    boolean	moveToEnd;
+
+    moveToEnd = (m_TextOutput.getDocument().getLength() == m_TextOutput.getCaretPosition());
+    m_TextOutput.append((stdout ? "[OUT] " : "[ERR] ") + line + "\n");
+    if (moveToEnd)
+      m_TextOutput.setCaretPosition(m_TextOutput.getDocument().getLength());
   }
 
   /**
