@@ -15,7 +15,7 @@
 
 /*
  * JShellEvent.java
- * Copyright (C) 2018 University of Waikato, Hamilton, NZ
+ * Copyright (C) 2018 FracPete
  */
 
 package com.github.fracpete.jshell.event;
