@@ -20,6 +20,9 @@
 
 package com.github.fracpete.jshell;
 
+import com.github.fracpete.jshell.event.JShellEvent;
+import com.github.fracpete.jshell.event.JShellEvent.EventType;
+import com.github.fracpete.jshell.event.JShellListener;
 import com.github.fracpete.processoutput4j.core.StreamingProcessOutputType;
 import com.github.fracpete.processoutput4j.core.StreamingProcessOwner;
 import com.github.fracpete.processoutput4j.output.StreamingProcessOutput;
@@ -50,7 +53,9 @@ import java.awt.event.ActionEvent;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Panel for performing scripting via jshell. Requires Java 9.
@@ -102,6 +107,9 @@ public class JShellPanel
   /** executes the script. */
   protected transient StreamingProcessOutput m_Execution;
 
+  /** the listeners that listen for changes. */
+  protected Set<JShellListener> m_JShellListeners;
+
   /**
    * Initializes the members.
    */
@@ -113,6 +121,8 @@ public class JShellPanel
     m_FileChooserOutput = new BaseFileChooser();
     m_FileChooserOutput.addChoosableFileFilter(new ExtensionFileFilter("Text file", "txt"));
     m_FileChooserOutput.setAcceptAllFileFilterUsed(true);
+
+    m_JShellListeners = new HashSet<>();
   }
 
   /**
@@ -208,12 +218,21 @@ public class JShellPanel
   }
 
   /**
+   * Returns whether a script is currently running.
+   *
+   * @return		true if a script is running
+   */
+  public boolean isRunning() {
+    return (m_Execution != null);
+  }
+
+  /**
    * Updates the state of the buttons.
    */
   protected void updateButtons() {
     boolean     running;
 
-    running = (m_Execution != null);
+    running = isRunning();
 
     // script
     m_ButtonScriptLoad.setEnabled(!running);
@@ -250,9 +269,11 @@ public class JShellPanel
     try {
       lines = Files.readAllLines(script.toPath());
       m_TextCode.setText(Utils.flatten(lines, "\n"));
+      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_LOAD_SUCCESS));
     }
     catch (Exception e) {
       GUIHelper.showErrorMessage(this, "Failed to load script from: " + script, e);
+      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_LOAD_FAILURE));
     }
 
     updateButtons();
@@ -272,8 +293,13 @@ public class JShellPanel
 
     script = m_FileChooserScript.getSelectedFile();
     msg    = FileUtils.writeToFileMsg(script.getAbsolutePath(), m_TextCode.getText(), false, null);
-    if (msg != null)
+    if (msg != null) {
       GUIHelper.showErrorMessage(this, "Failed to save script to : " + script + "\n" + msg);
+      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_SAVE_FAILURE));
+    }
+    else {
+      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_SAVE_SUCCESS));
+    }
 
     updateButtons();
   }
@@ -289,6 +315,7 @@ public class JShellPanel
     ProcessBuilder 	builder;
     Runnable		run;
 
+    stopScript();
     clearScriptOutput();
 
     // create tmp file name
@@ -297,6 +324,7 @@ public class JShellPanel
     }
     catch (Exception e) {
       GUIHelper.showErrorMessage(this, "Failed to create temporary file for script!\nCannot execute script!", e);
+      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_RUN_SETUP_FAILURE));
       return;
     }
 
@@ -310,6 +338,7 @@ public class JShellPanel
     if (msg != null) {
       tmpFile.delete();
       GUIHelper.showErrorMessage(this, "Failed to write script to temporary file: " + tmpFile + "\n" + msg);
+      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_RUN_SETUP_FAILURE));
       return;
     }
 
@@ -329,16 +358,23 @@ public class JShellPanel
       public void run() {
 	try {
 	  m_Execution.monitor(builder);
+	  if (m_Execution.getExitCode() != 0)
+	    notifyJShellListeners(new JShellEvent(JShellPanel.this, EventType.SCRIPT_RUN_FAILURE));
+	  else
+	    notifyJShellListeners(new JShellEvent(JShellPanel.this, EventType.SCRIPT_RUN_SUCCESS));
 	}
 	catch (Exception e) {
 	  GUIHelper.showErrorMessage(JShellPanel.this, "Failed to execute script!", e);
+	  notifyJShellListeners(new JShellEvent(JShellPanel.this, EventType.SCRIPT_RUN_FAILURE));
 	}
+	notifyJShellListeners(new JShellEvent(JShellPanel.this, EventType.SCRIPT_FINISHED));
 	m_Execution = null;
 	tmpFile.delete();
 	updateButtons();
       }
     };
     new Thread(run).start();
+    notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_RUN));
 
     updateButtons();
   }
@@ -350,6 +386,7 @@ public class JShellPanel
     if (m_Execution != null) {
       m_Execution.destroy();
       m_Execution = null;
+      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_STOP));
     }
 
     updateButtons();
@@ -360,6 +397,7 @@ public class JShellPanel
    */
   public void clearScriptOutput() {
     m_TextOutput.setText("");
+    notifyJShellListeners(new JShellEvent(this, EventType.OUTPUT_CLEARED));
     updateButtons();
   }
 
@@ -375,10 +413,33 @@ public class JShellPanel
       return;
 
     msg = FileUtils.writeToFileMsg(m_FileChooserOutput.getSelectedFile().getAbsolutePath(), m_TextOutput.getText(), false, null);
-    if (msg != null)
+    if (msg != null) {
       GUIHelper.showErrorMessage(this, msg, "Failed saving output");
+      notifyJShellListeners(new JShellEvent(this, EventType.OUTPUT_SAVE_FAILURE));
+    }
+    else {
+      notifyJShellListeners(new JShellEvent(this, EventType.OUTPUT_SAVE_SUCESS));
+    }
 
     updateButtons();
+  }
+
+  /**
+   * Returns the current code.
+   *
+   * @return		the code
+   */
+  public String getCode() {
+    return m_TextCode.getText();
+  }
+
+  /**
+   * Returns the current output.
+   *
+   * @return		the output
+   */
+  public String getOutput() {
+    return m_TextOutput.getText();
   }
 
   /**
@@ -437,6 +498,34 @@ public class JShellPanel
   }
 
   /**
+   * Adds the listener to the internal list.
+   *
+   * @param l		the listener to add
+   */
+  public void addJShellListener(JShellListener l) {
+    m_JShellListeners.add(l);
+  }
+
+  /**
+   * Removes the listener to the internal list.
+   *
+   * @param l		the listener to remove
+   */
+  public void removeJShellListener(JShellListener l) {
+    m_JShellListeners.remove(l);
+  }
+
+  /**
+   * Notifies all the listeners with the specified event.
+   *
+   * @param e		the event to send
+   */
+  protected synchronized void notifyJShellListeners(JShellEvent e) {
+    for (JShellListener l: m_JShellListeners)
+      l.jshellEventOccurred(e);
+  }
+
+  /**
    * For testing only.
    *
    * @param args first argument is interpreted as script
@@ -446,6 +535,7 @@ public class JShellPanel
     JShellPanel	panel;
 
     panel = new JShellPanel();
+    panel.addJShellListener((JShellEvent e) -> System.out.println(e.getType()));
     frame = new BaseFrame("JShell");
     frame.setIconImage(GUIHelper.getIcon("jshell.gif").getImage());
     frame.getContentPane().setLayout(new BorderLayout());
