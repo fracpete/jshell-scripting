@@ -232,6 +232,9 @@ public class JShellPanel
   protected void updateButtons() {
     boolean     running;
 
+    if (!isAvailable())
+      return;
+
     running = isRunning();
 
     // script
