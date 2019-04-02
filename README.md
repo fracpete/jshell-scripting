@@ -94,6 +94,12 @@ Add the following dependency to your `pom.xml`:
     </dependency>
 ```
 
-## Screenshot
+## Screenshots
+
+Default theme:
 
 ![Screenshot of example script output](src/site/resources/example.png)
+
+Dark theme:
+
+![Screenshot of example script output](src/site/resources/example_dark.png)
