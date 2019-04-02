@@ -46,6 +46,19 @@ JShellPanel panel = new JShellPanel();
 panel.addJShellListener((JShellEvent e) -> System.out.println(e.getType()));
 ```
 
+There are several themes available:
+* dark
+* default
+* default-alt
+* eclipse
+* idea
+* monokai
+* vs
+
+Which you can get/set via the following methods of the `JShellPanel` class:
+* `getCurrentTheme()`
+* `setCurrentTheme(String)`
+
 ## Command-line
 
 You don't have to use the widget in your own code, you can simply go ahead

@@ -37,9 +37,11 @@ import org.apache.commons.lang3.JavaVersion;
 import org.apache.commons.lang3.SystemUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rsyntaxtextarea.Theme;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -53,6 +55,7 @@ import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.io.File;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -70,11 +73,28 @@ public class JShellPanel
   extends BasePanel
   implements StreamingProcessOwner {
 
+  /** the available themes. */
+  public final static String[] THEMES = new String[]{
+    "dark",
+    "default",
+    "default-alt",
+    "eclipse",
+    "idea",
+    "monokai",
+    "vs",
+  };
+
+  /** the default theme. */
+  public final static String DEFAULT_THEME = "default";
+
   /** whether scripting is available. */
   protected Boolean m_Available;
 
   /** for splitting code and output. */
   protected JSplitPane m_SplitPane;
+
+  /** the panel with the themes. */
+  protected JComboBox<String> m_ComboBoxThemes;
 
   /** the text area for the script. */
   protected RSyntaxTextArea m_TextCode;
@@ -135,6 +155,8 @@ public class JShellPanel
     JPanel panelRight;
     JPanel panelButtons;
     JPanel panelText;
+    JPanel panelTop;
+    JPanel panelThemes;
     JLabel label;
 
     setLayout(new BorderLayout());
@@ -177,10 +199,22 @@ public class JShellPanel
       }
     });
     panel.add(new RTextScrollPane(m_TextCode), BorderLayout.CENTER);
+    panelTop = new JPanel(new BorderLayout());
+    panel.add(panelTop, BorderLayout.NORTH);
     panelText = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    panel.add(panelText, BorderLayout.NORTH);
+    panelTop.add(panelText, BorderLayout.WEST);
     label = new JLabel("JShell");
     panelText.add(label);
+    panelThemes = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    panelTop.add(panelThemes, BorderLayout.EAST);
+    m_ComboBoxThemes = new JComboBox<>(THEMES);
+    m_ComboBoxThemes.setSelectedItem(DEFAULT_THEME);
+    m_ComboBoxThemes.addActionListener((ActionEvent e) -> updateTheme());
+    label = new JLabel("Theme");
+    label.setDisplayedMnemonic('T');
+    label.setLabelFor(m_ComboBoxThemes);
+    panelThemes.add(label);
+    panelThemes.add(m_ComboBoxThemes);
     panelRight = new JPanel(new BorderLayout());
     panel.add(panelRight, BorderLayout.EAST);
     panelButtons = new JPanel(new GridLayout(0, 1));
@@ -231,6 +265,55 @@ public class JShellPanel
    */
   protected void finishInit() {
     updateButtons();
+  }
+
+  /**
+   * Updates the theme.
+   *
+   * @return		true if successfully applied
+   */
+  protected boolean updateTheme() {
+    String	themeURL;
+    InputStream	in;
+    Theme	theme;
+
+    themeURL = "org/fife/ui/rsyntaxtextarea/themes/" + m_ComboBoxThemes.getSelectedItem() + ".xml";
+    in       = ClassLoader.getSystemResourceAsStream(themeURL);
+    try {
+      theme = Theme.load(in);
+      theme.apply(m_TextCode);
+      return true;
+    }
+    catch (Exception e) {
+      return false;
+    }
+    finally {
+      FileUtils.closeQuietly(in);
+    }
+  }
+
+  /**
+   * Sets the current theme.
+   *
+   * @param value	the theme to use
+   * @see		#THEMES
+   */
+  public void setCurrentTheme(String value) {
+    for (String theme: THEMES) {
+      if (value.equalsIgnoreCase(theme)) {
+        m_ComboBoxThemes.setSelectedItem(theme);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Returns the currently selected theme.
+   *
+   * @return		the current theme
+   */
+  public String getCurrentTheme() {
+    return (String) m_ComboBoxThemes.getSelectedItem();
   }
 
   /**
