@@ -15,7 +15,7 @@
 
 /*
  * JShellPanel.java
- * Copyright (C) 2018 FracPete
+ * Copyright (C) 2018-2019 FracPete
  */
 
 package com.github.fracpete.jshell;
@@ -45,6 +45,8 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -160,6 +162,20 @@ public class JShellPanel
     m_TextCode.setAntiAliasingEnabled(true);
     m_TextCode.setCodeFoldingEnabled(true);
     m_TextCode.setBracketMatchingEnabled(false);
+    m_TextCode.getDocument().addDocumentListener(new DocumentListener() {
+      @Override
+      public void insertUpdate(DocumentEvent e) {
+        updateButtons();
+      }
+      @Override
+      public void removeUpdate(DocumentEvent e) {
+        updateButtons();
+      }
+      @Override
+      public void changedUpdate(DocumentEvent e) {
+        updateButtons();
+      }
+    });
     panel.add(new RTextScrollPane(m_TextCode), BorderLayout.CENTER);
     panelText = new JPanel(new FlowLayout(FlowLayout.LEFT));
     panel.add(panelText, BorderLayout.NORTH);
