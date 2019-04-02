@@ -78,3 +78,7 @@ Add the following dependency to your `pom.xml`:
       <version>0.0.2</version>
     </dependency>
 ```
+
+## Screenshot
+
+![Screenshot of example script output](src/site/resources/example.png)
