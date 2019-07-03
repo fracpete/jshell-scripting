@@ -142,6 +142,7 @@ and do some scripting. Here is what you need to do:
 
 ## Releases
 
+* [0.1.0](https://github.com/fracpete/jshell-scripting/releases/download/jshell-scripting-0.1.0/jshell-scripting-0.1.0-bin.zip)
 * [0.0.4](https://github.com/fracpete/jshell-scripting/releases/download/jshell-scripting-0.0.4/jshell-scripting-0.0.4-bin.zip)
 * [0.0.3](https://github.com/fracpete/jshell-scripting/releases/download/jshell-scripting-0.0.3/jshell-scripting-0.0.3-bin.zip)
 * [0.0.2](https://github.com/fracpete/jshell-scripting/releases/download/jshell-scripting-0.0.2/jshell-scripting-0.0.2-bin.zip)
@@ -156,7 +157,7 @@ Add the following dependency to your `pom.xml`:
     <dependency>
       <groupId>com.github.fracpete</groupId>
       <artifactId>jshell-scripting</artifactId>
-      <version>0.0.4</version>
+      <version>0.1.0</version>
     </dependency>
 ```
 
