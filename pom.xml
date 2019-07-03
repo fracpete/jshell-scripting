@@ -5,7 +5,7 @@
 
   <groupId>com.github.fracpete</groupId>
   <artifactId>jshell-scripting</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <parent>
@@ -83,7 +83,7 @@
     <connection>scm:git:https://github.com/fracpete/jshell-scripting</connection>
     <developerConnection>scm:git:https://github.com/fracpete/jshell-scripting</developerConnection>
     <url>https://github.com/fracpete/jshell-scripting</url>
-    <tag>jshell-scripting-0.1.0</tag>
+    <tag>HEAD</tag>
   </scm>
 
   <dependencies>
