@@ -14,8 +14,8 @@
  */
 
 /*
- * JShellEvent.java
- * Copyright (C) 2018 FracPete
+ * JShellPanelEvent.java
+ * Copyright (C) 2019 FracPete
  */
 
 package com.github.fracpete.jshell.event;
@@ -29,7 +29,7 @@ import java.util.EventObject;
  *
  * @author FracPete (fracpete at waikato dot ac dot nz)
  */
-public class JShellEvent
+public class JShellPanelEvent
   extends EventObject {
 
   /** the type of event. */
@@ -38,12 +38,6 @@ public class JShellEvent
     SCRIPT_LOAD_FAILURE,
     SCRIPT_SAVE_SUCCESS,
     SCRIPT_SAVE_FAILURE,
-    SCRIPT_RUN_SETUP_FAILURE,
-    SCRIPT_RUN,
-    SCRIPT_RUN_FAILURE,
-    SCRIPT_RUN_SUCCESS,
-    SCRIPT_STOP,
-    SCRIPT_FINISHED,
     OUTPUT_CLEARED,
     OUTPUT_SAVE_SUCESS,
     OUTPUT_SAVE_FAILURE,
@@ -55,20 +49,20 @@ public class JShellEvent
   /**
    * Constructs a prototypical Event.
    *
-   * @param source the panel on which the Event initially occurred
+   * @param source the source from which the Event initially originated
    * @throws IllegalArgumentException if source is null
    */
-  public JShellEvent(JShellPanel source, EventType type) {
+  public JShellPanelEvent(JShellPanel source, EventType type) {
     super(source);
     m_Type = type;
   }
 
   /**
-   * Returns the panel that triggered the event.
+   * Returns the JShellPanel that initiated the event.
    *
-   * @return the source panel
+   * @return		the instance
    */
-  public JShellPanel getPanel() {
+  public JShellPanel getJShellPanel() {
     return (JShellPanel) getSource();
   }
 

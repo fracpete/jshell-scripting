@@ -25,12 +25,12 @@ package com.github.fracpete.jshell.event;
  *
  * @author FracPete (fracpete at waikato dot ac dot nz)
  */
-public interface JShellListener {
+public interface JShellPanelListener {
 
   /**
    * Gets triggered with any event in the JShellPanel.
    *
    * @param e		the event
    */
-  public void jshellEventOccurred(JShellEvent e);
+  public void jshellPanelEventOccurred(JShellPanelEvent e);
 }

@@ -14,10 +14,10 @@ takes care of that.
 
 ## Usage
 
-### Java
+### Java GUI
 
 You only have to place the `JShellPanel` in a frame or dialog and you
-can start scripting.
+can start scripting (see example [GUI.java](src/main/java/com/github/fracpete/jshell/examples/GUI.java)).
 
 ```java
 import javax.swing.JFrame;
@@ -34,16 +34,21 @@ frame.setVisible(true);
 ```
 
 It is also possible to listen to events in the widget, by supplying a
-`com.github.fracpete.jshell.event.JShellListener` object. The following code
-simply outputs the event type to stdout:
+`com.github.fracpete.jshell.event.JShellPanelListener` object. For listening to 
+execution events, supply a `com.github.fracpete.jshell.event.JShellExecListener` 
+object. The following code simply outputs the event types to stdout (see 
+example [GUIEvents.java](src/main/java/com/github/fracpete/jshell/examples/GUIEvents.java)):
 
 ```java
-import com.github.fracpete.jshell.event.JShellEvent;
-import com.github.fracpete.jshell.event.JShellListener;
+import com.github.fracpete.jshell.event.JShellExecEvent;
+import com.github.fracpete.jshell.event.JShellExecListener;
+import com.github.fracpete.jshell.event.JShellPanelEvent;
+import com.github.fracpete.jshell.event.JShellPanelListener;
 import com.github.fracpete.jshell.JShellPanel;
 ...
 JShellPanel panel = new JShellPanel();
-panel.addJShellListener((JShellEvent e) -> System.out.println(e.getType()));
+panel.addJShellExecListener((JShellExecEvent e) -> System.out.println("exec: " + e.getType()));
+panel.addJShellPanelListener((JShellPanelEvent e) -> System.out.println("panel: " + e.getType()));
 ```
 
 There are several themes available:
@@ -59,7 +64,68 @@ Which you can get/set via the following methods of the `JShellPanel` class:
 * `getCurrentTheme()`
 * `setCurrentTheme(String)`
 
-## Command-line
+### Java backend
+
+You can also execute code in the background using the `JShellExec` class
+(see example [Exec.java](src/main/java/com/github/fracpete/jshell/examples/Exec.java)):
+
+```java
+import com.github.fracpete.jshell.JShellExec;
+...
+String code = "for (int i = 0; i < 10; i++) System.out.println(i)";
+JShellExec exec = new JShellExec();
+exec.runScript(code);
+```
+
+If you want to react to error messages, simply add a `com.github.fracpete.jshell.event.JShellErrorListener` listener:
+
+```java
+import com.github.fracpete.jshell.JShellExec;
+import com.github.fracpete.jshell.event.JShellErrorListener;
+...
+String code = "for (int i = 0; i < 10; i++) System.out.println(j)";
+JShellExec exec = new JShellExec();
+exec.addJShellErrorListener(new JShellErrorListener() {
+  public void jshellErrorOccurred(JShellErrorEvent e) {
+    System.err.println(e.getMessage());
+    if (e.hasException())
+      e.getException().printStackTrace();
+  }
+});
+exec.runScript(code);
+```
+
+Just like with `JShellPanel`, you can add listeners for events to the execution
+(e.g., that the execution has finished) by supplying a 
+`com.github.fracpete.jshell.event.JShellExecListener` instance. The following 
+code just outputs the event types to stdout (see example [ExecEvents.java](src/main/java/com/github/fracpete/jshell/examples/ExecEvents.java)): 
+
+```java
+import com.github.fracpete.jshell.JShellExec;
+...
+String code = "for (int i = 0; i < 10; i++) System.out.println(i)";
+JShellExec exec = new JShellExec();
+exec.addJShellExecListener((JShellExecEvent e) -> System.out.println("exec: " + e.getType()));
+exec.runScript(code);
+```
+
+### Additional flags
+
+`JShellPanel` and `JShellExec` both support JShell's additional flags: 
+
+* `-J` - runtime flags, used by JShell itself, e.g., `-verbose`
+* `-R` - remote runtime flags, the JVM that executes the code, e.g., `-javaagent:some.jar`
+* `-C` - compiler flags
+
+In case of `JShellPanel`, you can supply/access these flags via the following methods:
+* `setRuntimeFlags(List<String>)/getRuntimeFlags()`
+* `setRemoteRuntimeFlags(List<String>)/getRemoteRuntimeFlags()`
+* `setCompilerFlags(List<String>)/getCompilerFlags()`
+
+In case of `JShellExec`, these flags have to be supplied to the `runScript` method.
+
+
+### Command-line
 
 You don't have to use the widget in your own code, you can simply go ahead
 and do some scripting. Here is what you need to do:

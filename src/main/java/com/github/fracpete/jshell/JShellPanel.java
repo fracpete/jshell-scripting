@@ -20,12 +20,15 @@
 
 package com.github.fracpete.jshell;
 
-import com.github.fracpete.jshell.event.JShellEvent;
-import com.github.fracpete.jshell.event.JShellEvent.EventType;
-import com.github.fracpete.jshell.event.JShellListener;
+import com.github.fracpete.jshell.event.JShellErrorEvent;
+import com.github.fracpete.jshell.event.JShellErrorListener;
+import com.github.fracpete.jshell.event.JShellExecEvent;
+import com.github.fracpete.jshell.event.JShellExecListener;
+import com.github.fracpete.jshell.event.JShellPanelEvent;
+import com.github.fracpete.jshell.event.JShellPanelEvent.EventType;
+import com.github.fracpete.jshell.event.JShellPanelListener;
 import com.github.fracpete.processoutput4j.core.StreamingProcessOutputType;
 import com.github.fracpete.processoutput4j.core.StreamingProcessOwner;
-import com.github.fracpete.processoutput4j.output.StreamingProcessOutput;
 import nz.ac.waikato.cms.core.FileUtils;
 import nz.ac.waikato.cms.core.Utils;
 import nz.ac.waikato.cms.gui.core.BaseFileChooser;
@@ -33,8 +36,6 @@ import nz.ac.waikato.cms.gui.core.BaseFrame;
 import nz.ac.waikato.cms.gui.core.BasePanel;
 import nz.ac.waikato.cms.gui.core.ExtensionFileFilter;
 import nz.ac.waikato.cms.gui.core.GUIHelper;
-import org.apache.commons.lang3.JavaVersion;
-import org.apache.commons.lang3.SystemUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.Theme;
@@ -71,7 +72,7 @@ import java.util.Set;
  */
 public class JShellPanel
   extends BasePanel
-  implements StreamingProcessOwner {
+  implements StreamingProcessOwner, JShellErrorListener, JShellExecListener {
 
   /** the available themes. */
   public final static String[] THEMES = new String[]{
@@ -86,9 +87,6 @@ public class JShellPanel
 
   /** the default theme. */
   public final static String DEFAULT_THEME = "default";
-
-  /** whether scripting is available. */
-  protected Boolean m_Available;
 
   /** for splitting code and output. */
   protected JSplitPane m_SplitPane;
@@ -126,11 +124,20 @@ public class JShellPanel
   /** for the jshell output. */
   protected JTextArea m_TextOutput;
 
-  /** executes the script. */
-  protected transient StreamingProcessOutput m_Execution;
+  /** for executing the script. */
+  protected JShellExec m_Exec;
 
   /** the listeners that listen for changes. */
-  protected Set<JShellListener> m_JShellListeners;
+  protected Set<JShellPanelListener> m_JShellPanelListeners;
+
+  /** additional runtime flags to supply to JShell (-J). */
+  protected List<String> m_RuntimeFlags;
+
+  /** additional remote runtime flags to supply to JShell (-R). */
+  protected List<String> m_RemoteRuntimeFlags;
+
+  /** additional compiler flags to supply to JShell (-C). */
+  protected List<String> m_CompilerFlags;
 
   /**
    * Initializes the members.
@@ -144,7 +151,16 @@ public class JShellPanel
     m_FileChooserOutput.addChoosableFileFilter(new ExtensionFileFilter("Text file", "txt"));
     m_FileChooserOutput.setAcceptAllFileFilterUsed(true);
 
-    m_JShellListeners = new HashSet<>();
+    m_Exec = new JShellExec();
+    m_Exec.addJShellErrorListener(this);
+    m_Exec.addJShellExecListener(this);
+    m_Exec.setStreamingProcessOwner(this);
+
+    m_JShellPanelListeners = new HashSet<>();
+
+    m_RuntimeFlags       = new ArrayList<>();
+    m_RemoteRuntimeFlags = new ArrayList<>();
+    m_CompilerFlags      = new ArrayList<>();
   }
 
   /**
@@ -317,12 +333,30 @@ public class JShellPanel
   }
 
   /**
+   * Sets the debugging flag.
+   *
+   * @param value	true if to turn debugging output on
+   */
+  public void setDebug(boolean value) {
+    m_Exec.setDebug(value);
+  }
+
+  /**
+   * Returns the debugging flag.
+   *
+   * @return		true if debugging output on
+   */
+  public boolean getDebug() {
+    return m_Exec.getDebug();
+  }
+
+  /**
    * Returns whether a script is currently running.
    *
    * @return		true if a script is running
    */
   public boolean isRunning() {
-    return (m_Execution != null);
+    return m_Exec.isRunning();
   }
 
   /**
@@ -371,11 +405,11 @@ public class JShellPanel
     try {
       lines = Files.readAllLines(script.toPath());
       m_TextCode.setText(Utils.flatten(lines, "\n"));
-      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_LOAD_SUCCESS));
+      notifyJShellPanelListeners(new JShellPanelEvent(this, EventType.SCRIPT_LOAD_SUCCESS));
     }
     catch (Exception e) {
       GUIHelper.showErrorMessage(this, "Failed to load script from: " + script, e);
-      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_LOAD_FAILURE));
+      notifyJShellPanelListeners(new JShellPanelEvent(this, EventType.SCRIPT_LOAD_FAILURE));
     }
 
     updateButtons();
@@ -397,10 +431,10 @@ public class JShellPanel
     msg    = FileUtils.writeToFileMsg(script.getAbsolutePath(), m_TextCode.getText(), false, null);
     if (msg != null) {
       GUIHelper.showErrorMessage(this, "Failed to save script to : " + script + "\n" + msg);
-      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_SAVE_FAILURE));
+      notifyJShellPanelListeners(new JShellPanelEvent(this, EventType.SCRIPT_SAVE_FAILURE));
     }
     else {
-      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_SAVE_SUCCESS));
+      notifyJShellPanelListeners(new JShellPanelEvent(this, EventType.SCRIPT_SAVE_SUCCESS));
     }
 
     updateButtons();
@@ -410,74 +444,7 @@ public class JShellPanel
    * Executes the script.
    */
   public void runScript() {
-    List<String>	cmd;
-    final File		tmpFile;
-    String		code;
-    String		msg;
-    ProcessBuilder 	builder;
-    Runnable		run;
-
-    stopScript();
-    clearScriptOutput();
-
-    // create tmp file name
-    try {
-      tmpFile = File.createTempFile("jshell-", ".jsh");
-    }
-    catch (Exception e) {
-      GUIHelper.showErrorMessage(this, "Failed to create temporary file for script!\nCannot execute script!", e);
-      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_RUN_SETUP_FAILURE));
-      return;
-    }
-
-    // ensure that "/exit is in code"
-    code = m_TextCode.getText();
-    if (!code.toLowerCase().contains("/exit"))
-      code += "\n/exit\n";
-
-    // save script to tmp file
-    msg = FileUtils.writeToFileMsg(tmpFile.getAbsolutePath(), code, false, null);
-    if (msg != null) {
-      tmpFile.delete();
-      GUIHelper.showErrorMessage(this, "Failed to write script to temporary file: " + tmpFile + "\n" + msg);
-      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_RUN_SETUP_FAILURE));
-      return;
-    }
-
-    // build commandline for jshell
-    cmd = new ArrayList<>();
-    cmd.add(getExecutable());
-    cmd.add("--class-path");
-    cmd.add(System.getProperty("java.class.path"));
-    cmd.add(tmpFile.getAbsolutePath());
-
-    builder = new ProcessBuilder();
-    builder.command(cmd);
-    m_Execution = new StreamingProcessOutput(this);
-
-    run = new Runnable() {
-      @Override
-      public void run() {
-	try {
-	  m_Execution.monitor(builder);
-	  if (m_Execution.getExitCode() != 0)
-	    notifyJShellListeners(new JShellEvent(JShellPanel.this, EventType.SCRIPT_RUN_FAILURE));
-	  else
-	    notifyJShellListeners(new JShellEvent(JShellPanel.this, EventType.SCRIPT_RUN_SUCCESS));
-	}
-	catch (Exception e) {
-	  GUIHelper.showErrorMessage(JShellPanel.this, "Failed to execute script!", e);
-	  notifyJShellListeners(new JShellEvent(JShellPanel.this, EventType.SCRIPT_RUN_FAILURE));
-	}
-	notifyJShellListeners(new JShellEvent(JShellPanel.this, EventType.SCRIPT_FINISHED));
-	m_Execution = null;
-	tmpFile.delete();
-	updateButtons();
-      }
-    };
-    new Thread(run).start();
-    notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_RUN));
-
+    m_Exec.runScript(m_TextCode.getText(), m_RuntimeFlags, m_RemoteRuntimeFlags, m_CompilerFlags);
     updateButtons();
   }
 
@@ -485,12 +452,7 @@ public class JShellPanel
    * Stops a running script.
    */
   public void stopScript() {
-    if (m_Execution != null) {
-      m_Execution.destroy();
-      m_Execution = null;
-      notifyJShellListeners(new JShellEvent(this, EventType.SCRIPT_STOP));
-    }
-
+    m_Exec.stopScript();
     updateButtons();
   }
 
@@ -499,7 +461,7 @@ public class JShellPanel
    */
   public void clearScriptOutput() {
     m_TextOutput.setText("");
-    notifyJShellListeners(new JShellEvent(this, EventType.OUTPUT_CLEARED));
+    notifyJShellPanelListeners(new JShellPanelEvent(this, EventType.OUTPUT_CLEARED));
     updateButtons();
   }
 
@@ -517,10 +479,10 @@ public class JShellPanel
     msg = FileUtils.writeToFileMsg(m_FileChooserOutput.getSelectedFile().getAbsolutePath(), m_TextOutput.getText(), false, null);
     if (msg != null) {
       GUIHelper.showErrorMessage(this, msg, "Failed saving output");
-      notifyJShellListeners(new JShellEvent(this, EventType.OUTPUT_SAVE_FAILURE));
+      notifyJShellPanelListeners(new JShellPanelEvent(this, EventType.OUTPUT_SAVE_FAILURE));
     }
     else {
-      notifyJShellListeners(new JShellEvent(this, EventType.OUTPUT_SAVE_SUCESS));
+      notifyJShellPanelListeners(new JShellPanelEvent(this, EventType.OUTPUT_SAVE_SUCESS));
     }
 
     updateButtons();
@@ -545,34 +507,12 @@ public class JShellPanel
   }
 
   /**
-   * Returns the jshell executable.
-   *
-   * @return the executable path
-   */
-  public String getExecutable() {
-    String result;
-    String home;
-
-    home = System.getProperty("java.home");
-    result = home + File.separator + "bin" + File.separator + "jshell";
-    if (SystemUtils.IS_OS_WINDOWS)
-      result += ".exe";
-
-    return result;
-  }
-
-  /**
    * Checks whether jshell executable is available.
    *
    * @return true if available
    */
   public boolean isAvailable() {
-    if (m_Available == null) {
-      m_Available = JavaVersion.JAVA_RECENT.atLeast(JavaVersion.JAVA_9)
-	&& new File(getExecutable()).exists()
-	&& !System.getProperty("java.class.path").isEmpty();
-    }
-    return m_Available;
+    return m_Exec.isAvailable();
   }
 
   /**
@@ -600,31 +540,132 @@ public class JShellPanel
   }
 
   /**
-   * Adds the listener to the internal list.
+   * Adds the exec listener to the internal list.
    *
    * @param l		the listener to add
    */
-  public void addJShellListener(JShellListener l) {
-    m_JShellListeners.add(l);
+  public void addJShellExecListener(JShellExecListener l) {
+    m_Exec.addJShellExecListener(l);
   }
 
   /**
-   * Removes the listener to the internal list.
+   * Removes the exec listener to the internal list.
    *
    * @param l		the listener to remove
    */
-  public void removeJShellListener(JShellListener l) {
-    m_JShellListeners.remove(l);
+  public void removeJShellExecListener(JShellExecListener l) {
+    m_Exec.removeJShellExecListener(l);
   }
 
   /**
-   * Notifies all the listeners with the specified event.
+   * Adds the panel listener to the internal list.
+   *
+   * @param l		the listener to add
+   */
+  public void addJShellPanelListener(JShellPanelListener l) {
+    m_JShellPanelListeners.add(l);
+  }
+
+  /**
+   * Removes the panel listener to the internal list.
+   *
+   * @param l		the listener to remove
+   */
+  public void removeJShellExecListener(JShellPanelListener l) {
+    m_JShellPanelListeners.remove(l);
+  }
+
+  /**
+   * Notifies all the listeners with the specified panel event.
    *
    * @param e		the event to send
    */
-  protected synchronized void notifyJShellListeners(JShellEvent e) {
-    for (JShellListener l: m_JShellListeners)
-      l.jshellEventOccurred(e);
+  public synchronized void notifyJShellPanelListeners(JShellPanelEvent e) {
+    for (JShellPanelListener l: m_JShellPanelListeners)
+      l.jshellPanelEventOccurred(e);
+  }
+
+  /**
+   * Gets called when an error occurred.
+   *
+   * @param e		the error
+   */
+  public void jshellErrorOccurred(JShellErrorEvent e) {
+    if (e.hasException())
+      GUIHelper.showErrorMessage(this, e.getMessage(), e.getException());
+    else
+      GUIHelper.showErrorMessage(this, e.getMessage());
+  }
+
+  /**
+   * Gets triggered with any event in the JShellPanel.
+   *
+   * @param e		the event
+   */
+  public void jshellExecEventOccurred(JShellExecEvent e) {
+    updateButtons();
+  }
+
+  /**
+   * Sets the runtime flags to supply to JShell (-J), used by JShell (eg -verbose).
+   *
+   * @param value	the flags
+   */
+  public void setRuntimeFlags(List<String> value) {
+    m_RuntimeFlags.clear();
+    if (value != null)
+      m_RuntimeFlags.addAll(value);
+  }
+
+  /**
+   * Returns the runtime flags to supply to JShell (-J), used by JShell (eg -verbose).
+   * 
+   * @return		the flags
+   */
+  public List<String> getRuntimeFlags() {
+    return m_RuntimeFlags;
+  }
+
+  /**
+   * Sets the remote runtime flags to supply to JShell (-R), used by the JVM
+   * executing the code (eg -javaagent:...).
+   *
+   * @param value	the flags
+   */
+  public void setRemoteRuntimeFlags(List<String> value) {
+    m_RemoteRuntimeFlags.clear();
+    if (value != null)
+      m_RemoteRuntimeFlags.addAll(value);
+  }
+
+  /**
+   * Returns the remote runtime flags to supply to JShell (-R), used by the JVM
+   * executing the code (eg -javaagent:...).
+   * 
+   * @return		the flags
+   */
+  public List<String> getRemoteRuntimeFlags() {
+    return m_RemoteRuntimeFlags;
+  }
+
+  /**
+   * Sets the compiler flags to supply to JShell (-C).
+   *
+   * @param value	the flags
+   */
+  public void setCompilerFlags(List<String> value) {
+    m_CompilerFlags.clear();
+    if (value != null)
+      m_CompilerFlags.addAll(value);
+  }
+
+  /**
+   * Returns the compiler flags to supply to JShell (-C).
+   * 
+   * @return		the flags
+   */
+  public List<String> getCompilerFlags() {
+    return m_CompilerFlags;
   }
 
   /**
@@ -637,7 +678,8 @@ public class JShellPanel
     JShellPanel	panel;
 
     panel = new JShellPanel();
-    panel.addJShellListener((JShellEvent e) -> System.out.println(e.getType()));
+    panel.addJShellExecListener((JShellExecEvent e) -> System.out.println("exec: " + e.getType()));
+    panel.addJShellPanelListener((JShellPanelEvent e) -> System.out.println("panel: " + e.getType()));
     frame = new BaseFrame("JShell");
     frame.setIconImage(GUIHelper.getIcon("jshell.gif").getImage());
     frame.getContentPane().setLayout(new BorderLayout());
