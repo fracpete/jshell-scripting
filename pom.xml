@@ -98,19 +98,19 @@
     <dependency>
       <groupId>com.github.waikato</groupId>
       <artifactId>fcms-widgets</artifactId>
-      <version>0.0.14</version>
+      <version>0.0.21</version>
     </dependency>
 
     <dependency>
       <groupId>com.github.fracpete</groupId>
       <artifactId>jfilechooser-bookmarks</artifactId>
-      <version>0.1.6</version>
+      <version>0.1.8</version>
     </dependency>
 
     <dependency>
       <groupId>com.github.fracpete</groupId>
       <artifactId>processoutput4j</artifactId>
-      <version>0.0.7</version>
+      <version>0.0.9</version>
     </dependency>
 
     <dependency>
