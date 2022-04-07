@@ -80,8 +80,8 @@
   </properties>
 
   <scm>
-    <connection>scm:git:https://github.com/fracpete/jshell-scripting</connection>
-    <developerConnection>scm:git:https://github.com/fracpete/jshell-scripting</developerConnection>
+    <connection>scm:git:ssh://git@github.com/fracpete/jshell-scripting</connection>
+    <developerConnection>scm:git:ssh://git@github.com/fracpete/jshell-scripting</developerConnection>
     <url>https://github.com/fracpete/jshell-scripting</url>
     <tag>HEAD</tag>
   </scm>
