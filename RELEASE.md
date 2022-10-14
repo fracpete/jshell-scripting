@@ -13,3 +13,6 @@ How to make a release
 
   * Enter *release title*, eg: `Release v0.0.3`
   * Attach `-bin.zip` from `target`
+
+* add release download link to [README.md](README.md#releases)
+* update Maven artifact version in [README.md](README.md#maven)
